@@ -1,0 +1,6 @@
+.venv/
+portainer*/
+notebooks/data/
+*__MACOSX/
+.python-version
+.env

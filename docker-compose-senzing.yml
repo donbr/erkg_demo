@@ -1,0 +1,124 @@
+x-common-env: &common-env
+  TZ: America/Los_Angeles
+
+# Define volumes
+volumes:
+  postgres_data:
+  neo4j_data:
+
+# Define networks
+networks:
+  senzing_network:
+    driver: bridge
+
+# Services
+services:
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    env_file:
+      - .env
+    environment:
+      <<: *common-env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 30s
+      retries: 5
+    networks:
+      - senzing_network
+
+  init-postgresql:
+    image: senzing/init-postgresql:latest
+    container_name: init-postgresql
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      <<: *common-env
+      SENZING_SUBCOMMAND: mandatory
+    networks:
+      - senzing_network
+
+  senzingapi-tools:
+    image: senzing/senzingapi-tools:latest
+    container_name: senzingapi-tools
+    env_file:
+      - .env
+    environment:
+      <<: *common-env
+    stdin_open: true
+    tty: true
+    networks:
+      - senzing_network
+
+  web-app-demo:
+    image: senzing/web-app-demo:latest
+    container_name: web-app-demo
+    depends_on:
+      init-postgresql:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      <<: *common-env
+      SENZING_DATA_MART_POSTGRESQL_HOST: ${SENZING_DATA_MART_POSTGRESQL_HOST}
+      SENZING_DATA_MART_POSTGRESQL_PORT: ${SENZING_DATA_MART_POSTGRESQL_PORT}
+      SENZING_DATA_MART_POSTGRESQL_USER: ${SENZING_DATA_MART_POSTGRESQL_USER}
+      SENZING_DATA_MART_POSTGRESQL_PASSWORD: ${SENZING_DATA_MART_POSTGRESQL_PASSWORD}
+      SENZING_DATA_MART_POSTGRESQL_DATABASE: ${SENZING_DATA_MART_POSTGRESQL_DATABASE}
+    ports:
+      - "8251:8251"
+    networks:
+      - senzing_network
+
+  neo4j:
+    image: neo4j:5.16.0
+    container_name: neo4j
+    env_file:
+      - .env
+    environment:
+      <<: *common-env
+    volumes:
+      - neo4j_data:/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    networks:
+      - senzing_network
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./portainer-data:/data
+    ports:
+      - "9443:9443"
+      - "8000:8000"
+    environment:
+      <<: *common-env
+    networks:
+      - senzing_network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    env_file:
+      - .env
+    environment:
+      <<: *common-env
+    ports:
+      - "5050:80"
+    networks:
+      - senzing_network
